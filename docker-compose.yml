@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # MQTT Broker (Eclipse Mosquitto)
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: camera-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+    networks:
+      - camera-net
+
+  # Camera API Server
+  camera-api:
+    build: .
+    container_name: camera-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+    volumes:
+      - ./captured_images:/app/images
+    depends_on:
+      - mosquitto
+    network_mode: host  # Required for GigE camera access
+    restart: unless-stopped
+    privileged: true  # May be required for camera access
+
+  # Optional: MQTT Web Client (HiveMQ)
+  mqtt-web-client:
+    image: hivemq/hivemq-ce:latest
+    container_name: camera-mqtt-web
+    ports:
+      - "8080:8080"
+      - "8883:8883"
+    environment:
+      - HIVEMQ_BIND_ADDRESS=0.0.0.0
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+    networks:
+      - camera-net
+
+networks:
+  camera-net:
+    driver: bridge
+
+volumes:
+  mosquitto-data:
+  mosquitto-log:
