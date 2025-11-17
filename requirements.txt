@@ -1,0 +1,19 @@
+# FastAPI and server dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Data validation and processing
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Image processing
+numpy==1.26.3
+opencv-python==4.9.0.80
+
+# MQTT support (optional)
+paho-mqtt==1.6.1
+
+# Additional utilities
+python-dateutil==2.8.2

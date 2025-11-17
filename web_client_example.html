@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindVision Camera Web Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        header {
+            background: #333;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin-bottom: 5px;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 0;
+        }
+
+        .sidebar {
+            background: #f5f5f5;
+            padding: 20px;
+            border-right: 1px solid #ddd;
+        }
+
+        .main {
+            padding: 20px;
+        }
+
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px 0;
+            width: 100%;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        button.danger {
+            background: #e74c3c;
+        }
+
+        button.danger:hover {
+            background: #c0392b;
+        }
+
+        button.success {
+            background: #27ae60;
+        }
+
+        button.success:hover {
+            background: #229954;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        #video-container {
+            position: relative;
+            background: #000;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        #video-stream {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        #fps-counter {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #0f0;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .camera-select {
+            margin: 10px 0;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎥 MindVision 47MP Camera Web Client</h1>
+            <p>Real-time camera control and streaming</p>
+        </header>
+
+        <div class="content">
+            <div class="sidebar">
+                <div class="section">
+                    <h3>Connection</h3>
+                    <input type="text" id="api-url" value="http://localhost:8000" placeholder="API URL">
+                    <button onclick="discoverCameras()">🔍 Discover Cameras</button>
+                    <select id="camera-select" class="camera-select"></select>
+                    <button onclick="connectCamera()" class="success">🔌 Connect</button>
+                    <button onclick="disconnectCamera()" class="danger">⏏️ Disconnect</button>
+                </div>
+
+                <div class="section">
+                    <h3>Capture Control</h3>
+                    <button onclick="startCapture()" class="success">▶️ Start</button>
+                    <button onclick="pauseCapture()">⏸️ Pause</button>
+                    <button onclick="stopCapture()" class="danger">⏹️ Stop</button>
+                    <button onclick="snapImage()">📸 Snap Image</button>
+                </div>
+
+                <div class="section">
+                    <h3>Streaming</h3>
+                    <button onclick="startStreaming()" class="success">📡 Start Stream</button>
+                    <button onclick="stopStreaming()" class="danger">⏹️ Stop Stream</button>
+                </div>
+
+                <div class="section">
+                    <h3>Exposure</h3>
+                    <label>
+                        <input type="checkbox" id="auto-exposure" onchange="updateExposure()">
+                        Auto Exposure
+                    </label>
+                    <label>Exposure Time (µs):</label>
+                    <input type="number" id="exposure-time" value="30000" min="1" max="1000000">
+                    <label>Analog Gain:</label>
+                    <input type="number" id="analog-gain" value="100" min="0" max="1000">
+                    <button onclick="updateExposure()">Apply</button>
+                </div>
+
+                <div class="section">
+                    <h3>Trigger</h3>
+                    <label>Trigger Mode:</label>
+                    <select id="trigger-mode">
+                        <option value="0">Continuous</option>
+                        <option value="1">Software</option>
+                        <option value="2">Hardware</option>
+                    </select>
+                    <button onclick="updateTrigger()">Apply</button>
+                    <button onclick="softwareTrigger()">⚡ Software Trigger</button>
+                </div>
+            </div>
+
+            <div class="main">
+                <div id="status-messages"></div>
+
+                <div id="video-container">
+                    <img id="video-stream" src="" alt="Camera Stream">
+                    <div id="fps-counter">FPS: 0</div>
+                </div>
+
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-label">Captured Frames</div>
+                        <div class="stat-value" id="stat-captured">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Lost Frames</div>
+                        <div class="stat-value" id="stat-lost">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Loss Rate</div>
+                        <div class="stat-value" id="stat-loss-rate">0%</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Connection</div>
+                        <div class="stat-value" id="stat-connection">Disconnected</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let apiUrl = 'http://localhost:8000';
+        let currentCameraId = null;
+        let websocket = null;
+        let frameCount = 0;
+        let lastFpsUpdate = Date.now();
+        let currentFps = 0;
+        let statsInterval = null;
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status-messages');
+            const statusEl = document.createElement('div');
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = message;
+            statusDiv.appendChild(statusEl);
+            setTimeout(() => statusEl.remove(), 5000);
+        }
+
+        async function discoverCameras() {
+            try {
+                apiUrl = document.getElementById('api-url').value;
+                const response = await fetch(`${apiUrl}/cameras/discover`);
+                const cameras = await response.json();
+
+                const select = document.getElementById('camera-select');
+                select.innerHTML = '';
+
+                if (cameras.length === 0) {
+                    showStatus('No cameras found', 'error');
+                    return;
+                }
+
+                cameras.forEach((cam, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = `${cam.friendly_name} (${cam.serial_number})`;
+                    select.appendChild(option);
+                });
+
+                showStatus(`Found ${cameras.length} camera(s)`, 'success');
+            } catch (error) {
+                showStatus(`Discovery failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function connectCamera() {
+            try {
+                const index = document.getElementById('camera-select').value;
+                const response = await fetch(`${apiUrl}/cameras/${index}/connect`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                currentCameraId = data.camera_id;
+
+                document.getElementById('stat-connection').textContent = 'Connected';
+                document.getElementById('stat-connection').style.color = '#27ae60';
+
+                showStatus(`Connected to ${data.friendly_name}`, 'success');
+
+                // Start stats updates
+                startStatsUpdates();
+            } catch (error) {
+                showStatus(`Connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function disconnectCamera() {
+            if (!currentCameraId) return;
+
+            try {
+                // Stop streaming if active
+                if (websocket) stopStreaming();
+
+                // Stop stats updates
+                if (statsInterval) {
+                    clearInterval(statsInterval);
+                    statsInterval = null;
+                }
+
+                await fetch(`${apiUrl}/cameras/${currentCameraId}/disconnect`, {
+                    method: 'POST'
+                });
+
+                document.getElementById('stat-connection').textContent = 'Disconnected';
+                document.getElementById('stat-connection').style.color = '#e74c3c';
+
+                currentCameraId = null;
+                showStatus('Disconnected', 'info');
+            } catch (error) {
+                showStatus(`Disconnect failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function startCapture() {
+            if (!currentCameraId) return;
+
+            try {
+                await fetch(`${apiUrl}/cameras/${currentCameraId}/start`, {
+                    method: 'POST'
+                });
+                showStatus('Capture started', 'success');
+            } catch (error) {
+                showStatus(`Start failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function pauseCapture() {
+            if (!currentCameraId) return;
+
+            try {
+                await fetch(`${apiUrl}/cameras/${currentCameraId}/pause`, {
+                    method: 'POST'
+                });
+                showStatus('Capture paused', 'info');
+            } catch (error) {
+                showStatus(`Pause failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function stopCapture() {
+            if (!currentCameraId) return;
+
+            try {
+                await fetch(`${apiUrl}/cameras/${currentCameraId}/stop`, {
+                    method: 'POST'
+                });
+                showStatus('Capture stopped', 'info');
+            } catch (error) {
+                showStatus(`Stop failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function snapImage() {
+            if (!currentCameraId) return;
+
+            try {
+                const response = await fetch(`${apiUrl}/cameras/${currentCameraId}/snap?format=jpeg`);
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+
+                // Download image
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `snapshot_${Date.now()}.jpg`;
+                a.click();
+
+                showStatus('Image captured', 'success');
+            } catch (error) {
+                showStatus(`Snap failed: ${error.message}`, 'error');
+            }
+        }
+
+        function startStreaming() {
+            if (!currentCameraId) return;
+
+            const wsUrl = apiUrl.replace('http', 'ws');
+            websocket = new WebSocket(`${wsUrl}/cameras/${currentCameraId}/stream`);
+
+            websocket.onopen = () => {
+                showStatus('Streaming started', 'success');
+                frameCount = 0;
+                lastFpsUpdate = Date.now();
+            };
+
+            websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const img = document.getElementById('video-stream');
+                img.src = `data:image/jpeg;base64,${data.image}`;
+
+                // Update FPS
+                frameCount++;
+                const now = Date.now();
+                if (now - lastFpsUpdate >= 1000) {
+                    currentFps = frameCount;
+                    document.getElementById('fps-counter').textContent = `FPS: ${currentFps}`;
+                    frameCount = 0;
+                    lastFpsUpdate = now;
+                }
+            };
+
+            websocket.onerror = (error) => {
+                showStatus('WebSocket error', 'error');
+            };
+
+            websocket.onclose = () => {
+                showStatus('Streaming stopped', 'info');
+            };
+        }
+
+        function stopStreaming() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+                document.getElementById('fps-counter').textContent = 'FPS: 0';
+            }
+        }
+
+        async function updateExposure() {
+            if (!currentCameraId) return;
+
+            try {
+                const config = {
+                    auto_exposure: document.getElementById('auto-exposure').checked,
+                    exposure_time: parseFloat(document.getElementById('exposure-time').value),
+                    analog_gain: parseInt(document.getElementById('analog-gain').value)
+                };
+
+                await fetch(`${apiUrl}/cameras/${currentCameraId}/exposure`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                showStatus('Exposure updated', 'success');
+            } catch (error) {
+                showStatus(`Exposure update failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function updateTrigger() {
+            if (!currentCameraId) return;
+
+            try {
+                const config = {
+                    trigger_mode: parseInt(document.getElementById('trigger-mode').value)
+                };
+
+                await fetch(`${apiUrl}/cameras/${currentCameraId}/trigger`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                showStatus('Trigger mode updated', 'success');
+            } catch (error) {
+                showStatus(`Trigger update failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function softwareTrigger() {
+            if (!currentCameraId) return;
+
+            try {
+                await fetch(`${apiUrl}/cameras/${currentCameraId}/trigger/software`, {
+                    method: 'POST'
+                });
+                showStatus('Software trigger sent', 'success');
+            } catch (error) {
+                showStatus(`Trigger failed: ${error.message}`, 'error');
+            }
+        }
+
+        function startStatsUpdates() {
+            if (statsInterval) clearInterval(statsInterval);
+
+            statsInterval = setInterval(async () => {
+                if (!currentCameraId) return;
+
+                try {
+                    const response = await fetch(`${apiUrl}/cameras/${currentCameraId}/statistics`);
+                    const stats = await response.json();
+
+                    document.getElementById('stat-captured').textContent = stats.captured_frames;
+                    document.getElementById('stat-lost').textContent = stats.lost_frames;
+                    document.getElementById('stat-loss-rate').textContent =
+                        `${(stats.loss_rate * 100).toFixed(2)}%`;
+                } catch (error) {
+                    // Silently fail
+                }
+            }, 2000);
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            showStatus('Ready. Click "Discover Cameras" to begin.', 'info');
+        });
+    </script>
+</body>
+</html>
