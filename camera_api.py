@@ -1036,6 +1036,158 @@ async def load_parameters(camera_id: int, team: int = 0):
         raise HTTPException(status_code=500, detail=f"Load parameters failed: {e.message}")
 
 # =============================================================================
+# Network Speed Testing
+# =============================================================================
+
+@app.get("/cameras/{camera_id}/network/speed-test")
+async def network_speed_test(
+    camera_id: int,
+    duration: int = 10,
+    background_tasks: BackgroundTasks = None
+):
+    """
+    Run network speed test
+    Tests actual throughput, FPS, and frame loss rate
+    """
+    camera = camera_manager.get_camera(camera_id)
+
+    try:
+        # Get current statistics baseline
+        stats_before = mvsdk.CameraGetFrameStatistic(camera["handle"])
+
+        # Start capturing
+        was_capturing = camera["is_capturing"]
+        if not was_capturing:
+            mvsdk.CameraSetTriggerMode(camera["handle"], 0)
+            mvsdk.CameraPlay(camera["handle"])
+
+        # Collect data
+        frame_count = 0
+        total_bytes = 0
+        start_time = time.time()
+
+        while (time.time() - start_time) < duration:
+            try:
+                pRawData, FrameHead = mvsdk.CameraGetImageBuffer(camera["handle"], 200)
+                mvsdk.CameraImageProcess(camera["handle"], pRawData, camera["frame_buffer"], FrameHead)
+                mvsdk.CameraReleaseImageBuffer(camera["handle"], pRawData)
+
+                frame_count += 1
+                total_bytes += FrameHead.uBytes
+
+                # Small delay to prevent tight loop
+                await asyncio.sleep(0.001)
+
+            except mvsdk.CameraException as e:
+                if e.error_code != mvsdk.CAMERA_STATUS_TIME_OUT:
+                    break
+
+        # Stop if we started it
+        if not was_capturing:
+            mvsdk.CameraStop(camera["handle"])
+
+        # Calculate results
+        elapsed = time.time() - start_time
+        stats_after = mvsdk.CameraGetFrameStatistic(camera["handle"])
+
+        avg_fps = frame_count / elapsed if elapsed > 0 else 0
+        avg_mbps = (total_bytes / elapsed) / (1024 * 1024) if elapsed > 0 else 0
+
+        # Get resolution for theoretical calculation
+        res = mvsdk.CameraGetImageResolution(camera["handle"])
+        bytes_per_frame = res.iWidth * res.iHeight * 3  # Assume RGB
+        theoretical_mbps = (avg_fps * bytes_per_frame) / (1024 * 1024)
+
+        lost_frames = stats_after.iLost - stats_before.iLost
+        total_frames = stats_after.iTotal - stats_before.iTotal
+        loss_rate = (lost_frames / total_frames) if total_frames > 0 else 0
+
+        camera_manager.publish_event(camera_id, "speed_test_completed", {
+            "duration": elapsed,
+            "fps": avg_fps,
+            "throughput_mbps": avg_mbps * 8,
+            "loss_rate": loss_rate
+        })
+
+        return {
+            "duration_seconds": elapsed,
+            "frames_captured": frame_count,
+            "total_bytes": total_bytes,
+            "total_mb": total_bytes / (1024 * 1024),
+            "average_fps": round(avg_fps, 2),
+            "average_throughput_mbps": round(avg_mbps * 8, 2),
+            "average_throughput_MBs": round(avg_mbps, 2),
+            "theoretical_max_mbps": round(theoretical_mbps * 8, 2),
+            "efficiency_percent": round((avg_mbps / theoretical_mbps * 100), 1) if theoretical_mbps > 0 else 0,
+            "frame_statistics": {
+                "total": total_frames,
+                "lost": lost_frames,
+                "loss_rate_percent": round(loss_rate * 100, 2)
+            },
+            "resolution": {
+                "width": res.iWidth,
+                "height": res.iHeight
+            },
+            "status": "excellent" if loss_rate < 0.01 else ("good" if loss_rate < 0.05 else "poor")
+        }
+
+    except mvsdk.CameraException as e:
+        raise HTTPException(status_code=500, detail=f"Speed test failed: {e.message}")
+
+@app.get("/cameras/{camera_id}/network/packet-length")
+async def get_packet_length(camera_id: int):
+    """Get current GigE packet length setting"""
+    camera = camera_manager.get_camera(camera_id)
+    try:
+        pack_len = mvsdk.CameraGetTransPackLen(camera["handle"])
+        return {
+            "packet_length_index": pack_len,
+            "camera_id": camera_id
+        }
+    except mvsdk.CameraException as e:
+        raise HTTPException(status_code=500, detail=f"Get packet length failed: {e.message}")
+
+@app.put("/cameras/{camera_id}/network/packet-length")
+async def set_packet_length(camera_id: int, packet_index: int):
+    """Set GigE packet length (affects throughput)"""
+    camera = camera_manager.get_camera(camera_id)
+    try:
+        mvsdk.CameraSetTransPackLen(camera["handle"], packet_index)
+        camera_manager.publish_event(camera_id, "packet_length_changed", {"index": packet_index})
+        return {
+            "status": "success",
+            "packet_length_index": packet_index
+        }
+    except mvsdk.CameraException as e:
+        raise HTTPException(status_code=500, detail=f"Set packet length failed: {e.message}")
+
+@app.post("/cameras/{camera_id}/network/connection-test")
+async def test_connection(camera_id: int):
+    """Test camera network connection"""
+    camera = camera_manager.get_camera(camera_id)
+    try:
+        result = mvsdk.CameraConnectTest(camera["handle"])
+
+        return {
+            "connected": result == mvsdk.CAMERA_STATUS_SUCCESS,
+            "status_code": result,
+            "reconnect_count": mvsdk.CameraGetReConnectCounts(camera["handle"])
+        }
+    except mvsdk.CameraException as e:
+        raise HTTPException(status_code=500, detail=f"Connection test failed: {e.message}")
+
+@app.post("/cameras/{camera_id}/network/reset-timestamp")
+async def reset_timestamp(camera_id: int):
+    """Reset camera frame timestamp counter"""
+    camera = camera_manager.get_camera(camera_id)
+    try:
+        mvsdk.CameraRstTimeStamp(camera["handle"])
+        camera_manager.publish_event(camera_id, "timestamp_reset", {})
+        return {"status": "success"}
+    except mvsdk.CameraException as e:
+        raise HTTPException(status_code=500, detail=f"Reset timestamp failed: {e.message}")
+
+# =============================================================================
 # MQTT Configuration
 # =============================================================================
 
